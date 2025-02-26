@@ -2,10 +2,10 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>Simple Tetris</title>
+  <title>Enhanced Tetris</title>
   <style>
     body {
-      background: #333;
+      background: #222;
       color: #fff;
       margin: 0;
       padding: 0;
@@ -15,32 +15,93 @@
     h1 {
       margin-top: 20px;
     }
+    #game-area {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      margin: 0 auto;
+      margin-top: 20px;
+    }
     #tetris {
       border: 2px solid #fff;
-      display: block;
-      margin: 20px auto;
       background: #000;
+      display: block;
     }
-    #score {
-      font-size: 1.2rem;
+    #info {
       margin-top: 10px;
     }
+    .btn-container {
+      margin-top: 15px;
+    }
+    button {
+      margin: 5px;
+      padding: 10px 15px;
+      font-size: 1rem;
+      background-color: #444;
+      color: #fff;
+      border: 1px solid #999;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #666;
+    }
+
+    /* 라인 클리어 애니메이션(색 번쩍) 효과 */
+    .flash-line {
+      animation: flash 0.3s linear 2;
+    }
+    @keyframes flash {
+      0% { background-color: #fff; }
+      50% { background-color: #0f0; }
+      100% { background-color: #fff; }
+    }
+
   </style>
 </head>
 <body>
-  <h1>My Simple Tetris</h1>
-  <canvas id="tetris" width="240" height="400"></canvas>
-  <div id="score">Score: 0</div>
+  <h1>Enhanced Tetris</h1>
+
+  <!-- 게임 영역 -->
+  <div id="game-area">
+    <canvas id="tetris" width="240" height="400"></canvas>
+    <div id="info">
+      <div id="score">Score: 0</div>
+      <div id="lines">Lines Cleared: 0</div>
+    </div>
+    <div class="btn-container">
+      <button onclick="toggleBGM()">Toggle BGM</button>
+      <button onclick="resetGame()">Reset Game</button>
+    </div>
+  </div>
+
+  <!-- 소리 재생용 오디오 태그들 -->
+  <!-- 실제 mp3 파일 URL로 교체하거나, 로컬에 파일을 두고 경로를 설정하세요. -->
+  <audio id="bgm" src="https://actions.google.com/sounds/v1/ambiences/water_drip_1.ogg" loop></audio>
+  <audio id="lineClearSound" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
 
   <script>
     const canvas = document.getElementById('tetris');
     const context = canvas.getContext('2d');
+    context.scale(20, 20);
 
-    context.scale(20, 20); 
-    // 캔버스 한 칸(1블록)을 20픽셀로 확대한 것.
+    // ----- 음원 제어 -----
+    const bgm = document.getElementById('bgm');
+    const lineClearSound = document.getElementById('lineClearSound');
 
-    // 테트리스 블록 도형(피스) 정의
-    // I, L, J, O, S, Z, T 모양 예시
+    let bgmPlaying = false;
+
+    function toggleBGM() {
+      if (bgmPlaying) {
+        bgm.pause();
+        bgmPlaying = false;
+      } else {
+        bgm.play();
+        bgmPlaying = true;
+      }
+    }
+
+    // ----- 테트리스 기본 로직 -----
     const PIECES = {
       'T': [
         [0, 1, 0],
@@ -79,7 +140,6 @@
       ],
     };
 
-    // 색상 매핑 (각 블록마다 다른 색상)
     const COLORS = {
       'T': '#f0f',
       'O': '#ff0',
@@ -90,17 +150,16 @@
       'I': '#0ff',
     };
 
-    // 게임판(아레나) - 20행 x 12열
+    // 20행 x 12열
     const arena = createMatrix(12, 20);
 
-    // 플레이어 상태
     const player = {
       pos: {x: 0, y: 0},
       matrix: null,
       score: 0,
+      linesCleared: 0, // 라인 클리어 개수
     };
 
-    // 행x열 크기만큼 2차원 배열 만들기
     function createMatrix(w, h) {
       const matrix = [];
       while (h--) {
@@ -109,7 +168,20 @@
       return matrix;
     }
 
-    // 블록 그리기
+    function createPiece(type) {
+      const shape = PIECES[type];
+      // shape의 1을 실제 색상값으로 변환
+      return shape.map(row =>
+        row.map(value => value ? COLORS[type] : 0)
+      );
+    }
+
+    function draw() {
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      drawMatrix(arena, {x: 0, y: 0});
+      drawMatrix(player.matrix, player.pos);
+    }
+
     function drawMatrix(matrix, offset) {
       matrix.forEach((row, y) => {
         row.forEach((value, x) => {
@@ -121,28 +193,6 @@
       });
     }
 
-    // 전체 화면 그리기
-    function draw() {
-      context.clearRect(0, 0, canvas.width, canvas.height);
-      drawMatrix(arena, {x: 0, y: 0});
-      drawMatrix(player.matrix, player.pos);
-    }
-
-    // arena와 player 충돌 여부 판단
-    function collide(arena, player) {
-      const [m, o] = [player.matrix, player.pos];
-      for (let y = 0; y < m.length; y++) {
-        for (let x = 0; x < m[y].length; x++) {
-          if (m[y][x] !== 0 &&
-              (arena[y + o.y] && arena[y + o.y][x + o.x]) !== 0) {
-            return true;
-          }
-        }
-      }
-      return false;
-    }
-
-    // 블록이 고정될 때 arena에 병합
     function merge(arena, player) {
       player.matrix.forEach((row, y) => {
         row.forEach((value, x) => {
@@ -153,7 +203,47 @@
       });
     }
 
-    // 라인 지우고 점수 계산
+    function collide(arena, player) {
+      const [m, o] = [player.matrix, player.pos];
+      for (let y = 0; y < m.length; y++) {
+        for (let x = 0; x < m[y].length; x++) {
+          if (
+            m[y][x] !== 0 &&
+            (arena[y + o.y] && arena[y + o.y][x + o.x]) !== 0
+          ) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    // 라인 클리어 후 애니메이션 (flash-line 클래스 적용)
+    function flashLine(y) {
+      // arena[y][x] 좌표가 모두 차 있는 줄
+      // 애니메이션을 주려면, 잠시 arena에 특별한 값(예: 'flash')을 넣거나,
+      // canvas 단위가 아닌, 별도의 layer로 처리해야 합니다.
+      // 간단히 흰색 덮기 등을 고려해볼 수 있지만 여기서는
+      // DOM이 아니라 canvas여서, 직접 셀 색을 바꿔주고 짧은 애니메이션이 끝나면 지우는 방식을 써야 합니다.
+      // 여기서는 간단히 'lineClearSound'만 재생하고, 밑에서 row.fill(0)로 지우겠습니다.
+      // 그래도 "깜빡" 효과를 내려면, 잠깐 색을 바꿨다가 다시 그리는 방식을 시뮬레이션해 볼 수 있습니다.
+
+      // 0.1초 동안 번쩍 → 다시 draw
+      let flashColor = '#fff';
+      for (let x = 0; x < arena[y].length; x++) {
+        arena[y][x] = flashColor; // 번쩍 색
+      }
+      draw(); // 바로 다시 그려주기
+
+      setTimeout(() => {
+        // 0.1초 후 원래 지울 준비
+        for (let x = 0; x < arena[y].length; x++) {
+          arena[y][x] = 0;
+        }
+        draw();
+      }, 100);
+    }
+
     function arenaSweep() {
       let rowCount = 1;
       outer: for (let y = arena.length - 1; y > 0; y--) {
@@ -162,45 +252,41 @@
             continue outer;
           }
         }
-        // 가득 찬 행 발견 → 제거
+        // 라인 클리어 사운드 재생
+        lineClearSound.currentTime = 0; // 여러 줄 연속 클리어 시 사운드 재생 위해
+        lineClearSound.play();
+
+        // 라인 클리어 애니메이션
+        flashLine(y);
+
+        // 실제로 줄을 arena에서 제거하기
         const row = arena.splice(y, 1)[0].fill(0);
         arena.unshift(row);
         y++;
 
         player.score += rowCount * 10;
+        player.linesCleared += 1; // 라인 클리어 개수 증가
         rowCount *= 2;
       }
     }
 
-    // 새 블록 랜덤 생성
     function playerReset() {
       const pieces = Object.keys(PIECES);
       const randKey = pieces[Math.floor(Math.random() * pieces.length)];
       player.matrix = createPiece(randKey);
-
-      // 초기 위치
       player.pos.y = 0;
-      player.pos.x = (arena[0].length / 2 | 0) - 
+      player.pos.x = (arena[0].length / 2 | 0) -
                      (player.matrix[0].length / 2 | 0);
 
-      // 새 블록 등장하자마자 충돌이면 게임 오버
       if (collide(arena, player)) {
+        // 게임 오버
         arena.forEach(row => row.fill(0));
         player.score = 0;
+        player.linesCleared = 0;
         updateScore();
       }
     }
 
-    // 특정 도형 Key에 맞는 매트릭스 생성
-    function createPiece(type) {
-      const shape = PIECES[type];
-      // shape 배열을 0/1 기반이 아닌, 실제 색상 값으로 치환
-      return shape.map(row =>
-        row.map(value => value ? COLORS[type] : 0)
-      );
-    }
-
-    // 블록 아래로 한 칸 이동
     function playerDrop() {
       player.pos.y++;
       if (collide(arena, player)) {
@@ -213,7 +299,6 @@
       dropCounter = 0;
     }
 
-    // 블록 좌우 이동
     function playerMove(dir) {
       player.pos.x += dir;
       if (collide(arena, player)) {
@@ -221,7 +306,6 @@
       }
     }
 
-    // 블록 회전
     function playerRotate(dir) {
       const pos = player.pos.x;
       let offset = 1;
@@ -230,7 +314,6 @@
         player.pos.x += offset;
         offset = -(offset + (offset > 0 ? 1 : -1));
         if (offset > player.matrix[0].length) {
-          // 회전 불가능
           rotate(player.matrix, -dir);
           player.pos.x = pos;
           return;
@@ -238,13 +321,14 @@
       }
     }
 
-    // 행렬 회전
     function rotate(matrix, dir) {
+      // 전치 변환
       for (let y = 0; y < matrix.length; y++) {
         for (let x = 0; x < y; x++) {
           [matrix[x][y], matrix[y][x]] = [matrix[y][x], matrix[x][y]];
         }
       }
+      // 행 뒤집기 or 열 뒤집기
       if (dir > 0) {
         matrix.forEach(row => row.reverse());
       } else {
@@ -252,14 +336,13 @@
       }
     }
 
-    // 점수 표시
     function updateScore() {
       document.getElementById('score').innerText = `Score: ${player.score}`;
+      document.getElementById('lines').innerText = `Lines Cleared: ${player.linesCleared}`;
     }
 
-    // 애니메이션 루프
     let dropCounter = 0;
-    let dropInterval = 1000; // 1초마다 자동으로 아래로 이동
+    let dropInterval = 1000; // 1초 주기
 
     let lastTime = 0;
     function update(time = 0) {
@@ -270,12 +353,10 @@
       if (dropCounter > dropInterval) {
         playerDrop();
       }
-
       draw();
       requestAnimationFrame(update);
     }
 
-    // 키보드 입력
     document.addEventListener('keydown', event => {
       switch(event.key) {
         case 'ArrowLeft':
@@ -298,9 +379,21 @@
       }
     });
 
+    function resetGame() {
+      // 게임 상태 초기화
+      arena.forEach(row => row.fill(0));
+      player.score = 0;
+      player.linesCleared = 0;
+      playerReset();
+      updateScore();
+    }
+
     playerReset();
     updateScore();
     update();
+
+    // BGM 자동 실행은 일부 브라우저에서 막힐 수 있으므로,
+    // 사용자 버튼 클릭 시 toggleBGM()을 이용해 재생하는 것이 안전합니다.
   </script>
 </body>
 </html>
