@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>Enhanced Tetris</title>
+  <title>Gravity Tetris (Custom)</title>
   <style>
     body {
       background: #222;
@@ -46,23 +46,11 @@
     button:hover {
       background-color: #666;
     }
-
-    /* 라인 클리어 애니메이션(색 번쩍) 효과 */
-    .flash-line {
-      animation: flash 0.3s linear 2;
-    }
-    @keyframes flash {
-      0% { background-color: #fff; }
-      50% { background-color: #0f0; }
-      100% { background-color: #fff; }
-    }
-
   </style>
 </head>
 <body>
-  <h1>Enhanced Tetris</h1>
+  <h1>Gravity Tetris (Custom)</h1>
 
-  <!-- 게임 영역 -->
   <div id="game-area">
     <canvas id="tetris" width="240" height="400"></canvas>
     <div id="info">
@@ -75,9 +63,9 @@
     </div>
   </div>
 
-  <!-- 소리 재생용 오디오 태그들 -->
-  <!-- 실제 mp3 파일 URL로 교체하거나, 로컬에 파일을 두고 경로를 설정하세요. -->
-  <audio id="bgm" src="https://actions.google.com/sounds/v1/ambiences/water_drip_1.ogg" loop></audio>
+  <!-- 오디오 (배경음악 .mp3 예시) -->
+  <audio id="bgm" src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" loop></audio>
+  <!-- 라인 클리어 효과음 (원한다면 mp3로 바꿀 수도 있음) -->
   <audio id="lineClearSound" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
 
   <script>
@@ -85,7 +73,6 @@
     const context = canvas.getContext('2d');
     context.scale(20, 20);
 
-    // ----- 음원 제어 -----
     const bgm = document.getElementById('bgm');
     const lineClearSound = document.getElementById('lineClearSound');
 
@@ -150,14 +137,13 @@
       'I': '#0ff',
     };
 
-    // 20행 x 12열
     const arena = createMatrix(12, 20);
 
     const player = {
       pos: {x: 0, y: 0},
       matrix: null,
       score: 0,
-      linesCleared: 0, // 라인 클리어 개수
+      linesCleared: 0,
     };
 
     function createMatrix(w, h) {
@@ -170,7 +156,6 @@
 
     function createPiece(type) {
       const shape = PIECES[type];
-      // shape의 1을 실제 색상값으로 변환
       return shape.map(row =>
         row.map(value => value ? COLORS[type] : 0)
       );
@@ -218,25 +203,15 @@
       return false;
     }
 
-    // 라인 클리어 후 애니메이션 (flash-line 클래스 적용)
+    // ----- 라인 클리어 후 애니메이션 + 효과음 -----
     function flashLine(y) {
-      // arena[y][x] 좌표가 모두 차 있는 줄
-      // 애니메이션을 주려면, 잠시 arena에 특별한 값(예: 'flash')을 넣거나,
-      // canvas 단위가 아닌, 별도의 layer로 처리해야 합니다.
-      // 간단히 흰색 덮기 등을 고려해볼 수 있지만 여기서는
-      // DOM이 아니라 canvas여서, 직접 셀 색을 바꿔주고 짧은 애니메이션이 끝나면 지우는 방식을 써야 합니다.
-      // 여기서는 간단히 'lineClearSound'만 재생하고, 밑에서 row.fill(0)로 지우겠습니다.
-      // 그래도 "깜빡" 효과를 내려면, 잠깐 색을 바꿨다가 다시 그리는 방식을 시뮬레이션해 볼 수 있습니다.
-
-      // 0.1초 동안 번쩍 → 다시 draw
+      // 0.1초간 번쩍 효과만 주고, setTimeout으로 다시 0으로 돌려서 표시
       let flashColor = '#fff';
       for (let x = 0; x < arena[y].length; x++) {
-        arena[y][x] = flashColor; // 번쩍 색
+        arena[y][x] = flashColor;
       }
-      draw(); // 바로 다시 그려주기
-
+      draw();
       setTimeout(() => {
-        // 0.1초 후 원래 지울 준비
         for (let x = 0; x < arena[y].length; x++) {
           arena[y][x] = 0;
         }
@@ -252,21 +227,40 @@
             continue outer;
           }
         }
-        // 라인 클리어 사운드 재생
-        lineClearSound.currentTime = 0; // 여러 줄 연속 클리어 시 사운드 재생 위해
+        // 라인 완성 → 지움
+        lineClearSound.currentTime = 0;
         lineClearSound.play();
-
-        // 라인 클리어 애니메이션
         flashLine(y);
 
-        // 실제로 줄을 arena에서 제거하기
         const row = arena.splice(y, 1)[0].fill(0);
         arena.unshift(row);
         y++;
 
         player.score += rowCount * 10;
-        player.linesCleared += 1; // 라인 클리어 개수 증가
+        player.linesCleared += 1;
         rowCount *= 2;
+      }
+    }
+
+    // ----- (추가) applyGravity: 위에 있는 블록도 자동 낙하시키기 -----
+    function applyGravity(arena) {
+      const height = arena.length;   // 예: 20행
+      const width = arena[0].length; // 예: 12열
+
+      // 열 단위로 처리
+      for (let x = 0; x < width; x++) {
+        for (let y = height - 1; y >= 0; y--) {
+          if (arena[y][x] === 0) {
+            // 이 칸이 비어 있다면, 위쪽에서 블록을 찾아 내려준다
+            for (let k = y - 1; k >= 0; k--) {
+              if (arena[k][x] !== 0) {
+                arena[y][x] = arena[k][x];
+                arena[k][x] = 0;
+                break; // 위 블록 하나만 내려주고 중단
+              }
+            }
+          }
+        }
       }
     }
 
@@ -279,7 +273,6 @@
                      (player.matrix[0].length / 2 | 0);
 
       if (collide(arena, player)) {
-        // 게임 오버
         arena.forEach(row => row.fill(0));
         player.score = 0;
         player.linesCleared = 0;
@@ -287,12 +280,17 @@
       }
     }
 
+    // ----- 주기적으로 블록 낙하 후, 라인 클리어/중력 적용 -----
     function playerDrop() {
       player.pos.y++;
       if (collide(arena, player)) {
         player.pos.y--;
         merge(arena, player);
+
         arenaSweep();
+        applyGravity(arena);  // 라인 지운 뒤, 빈 칸 아래로 블록 낙하
+        // 만약 연속 클리어를 체크하려면 여기서 다시 arenaSweep() 호출 가능
+
         playerReset();
         updateScore();
       }
@@ -322,13 +320,11 @@
     }
 
     function rotate(matrix, dir) {
-      // 전치 변환
       for (let y = 0; y < matrix.length; y++) {
         for (let x = 0; x < y; x++) {
           [matrix[x][y], matrix[y][x]] = [matrix[y][x], matrix[x][y]];
         }
       }
-      // 행 뒤집기 or 열 뒤집기
       if (dir > 0) {
         matrix.forEach(row => row.reverse());
       } else {
@@ -342,7 +338,7 @@
     }
 
     let dropCounter = 0;
-    let dropInterval = 1000; // 1초 주기
+    let dropInterval = 1000; // 1초마다 자동 낙하
 
     let lastTime = 0;
     function update(time = 0) {
@@ -380,7 +376,6 @@
     });
 
     function resetGame() {
-      // 게임 상태 초기화
       arena.forEach(row => row.fill(0));
       player.score = 0;
       player.linesCleared = 0;
@@ -391,9 +386,6 @@
     playerReset();
     updateScore();
     update();
-
-    // BGM 자동 실행은 일부 브라우저에서 막힐 수 있으므로,
-    // 사용자 버튼 클릭 시 toggleBGM()을 이용해 재생하는 것이 안전합니다.
   </script>
 </body>
 </html>
